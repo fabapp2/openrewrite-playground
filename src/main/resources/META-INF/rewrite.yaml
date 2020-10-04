@@ -1,0 +1,58 @@
+type: specs.openrewrite.org/v1beta/visitor
+name: openrewrite.playground.OrderImports
+visitors:
+  - org.openrewrite.java.OrderImports
+---
+#type: specs.openrewrite.org/v1beta/visitor
+#name: openrewrite.playground.AddAnnotation
+#visitors:
+#  - org.openrewrite.java.AddAnnotation:
+#      scope: org.openrewrite.java.tree.J.VariableDecls
+#      annotation: foo.bar.MyAnnotation
+#---
+type: specs.openrewrite.org/v1beta/recipe
+name: playground.OrderImportsRecipe
+include:
+  - openrewrite.playground.OrderImports
+---
+# EJB
+type: specs.openrewrite.org/v1beta/visitor
+name: replace.ejb
+visitors:
+  - org.openrewrite.java.ChangeType:
+      type: javax.ejb.EJB
+      targetType: org.springframework.beans.factory.annotation.Autowired
+  - org.openrewrite.java.ChangeType:
+      type: javax.ejb.Stateless
+      targetType: org.springframework.stereotype.Component
+  - org.openrewrite.java.ChangeType:
+      type: javax.ejb.Singleton
+      targetType: org.springframework.stereotype.Component
+  - org.openrewrite.java.ChangeType:
+      type: javax.inject.Inject
+      targetType: org.springframework.beans.factory.annotation.Autowired
+---
+type: specs.openrewrite.org/v1beta/recipe
+name: replace.ejb
+include:
+  - replace.ejb
+
+#  - org.openrewrite.java.AddAnnotation
+#---
+#type: specs.openrewrite.org/v1beta/style
+#name: petclinic.Spring
+#configure:
+#  org.openrewrite.java.style.ImportLayoutStyle:
+#    layout:
+#      classCountToUseStarImport: 999
+#      nameCountToUseStarImport: 999
+#      blocks:
+#        - import java.*
+#        - <blank line>
+#        - import javax.*
+#        - <blank line>
+#        - import all other imports
+#        - <blank line>
+#        - import org.springframework.*
+#        - <blank line>
+#        - import static all other imports
