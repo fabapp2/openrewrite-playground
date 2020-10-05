@@ -2,14 +2,14 @@ type: specs.openrewrite.org/v1beta/visitor
 name: openrewrite.playground.OrderImports
 visitors:
   - org.openrewrite.java.OrderImports
----
+#---
 #type: specs.openrewrite.org/v1beta/visitor
 #name: openrewrite.playground.AddAnnotation
 #visitors:
 #  - org.openrewrite.java.AddAnnotation:
 #      scope: org.openrewrite.java.tree.J.VariableDecls
 #      annotation: foo.bar.MyAnnotation
-#---
+---
 type: specs.openrewrite.org/v1beta/recipe
 name: playground.OrderImportsRecipe
 include:
@@ -36,7 +36,27 @@ type: specs.openrewrite.org/v1beta/recipe
 name: replace.ejb
 include:
   - replace.ejb
-
+---
+type: specs.openrewrite.org/v1beta/visitor
+name: add.dependency
+visitors:
+  #  - org.openrewrite.maven.AddDependency:
+  #      groupId: org.springframework.boot
+  #      artifactId: spring-boot-starter-test
+  #      version: 2.3.4.RELEASE
+  #  - org.openrewrite.maven.AddDependency:
+  #      groupId: org.springframework.boot
+  #      artifactId: spring-boot-starter
+  #      version: 2.3.4.RELEASE
+  - org.openrewrite.maven.AddDependencyManagement:
+      groupId: org.springframework.boot
+      artifactId: spring-boot-starter
+      version: 6.6.6
+---
+type: specs.openrewrite.org/v1beta/recipe
+name: add.dependency
+include:
+  - add.dependency
 #  - org.openrewrite.java.AddAnnotation
 #---
 #type: specs.openrewrite.org/v1beta/style

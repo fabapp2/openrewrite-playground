@@ -5,10 +5,14 @@ import org.openrewrite.*;
 import org.openrewrite.config.ResourceLoader;
 import org.openrewrite.config.YamlResourceLoader;
 import org.openrewrite.java.JavaParser;
+import org.openrewrite.maven.MavenParser;
+import org.openrewrite.maven.tree.Maven;
 import org.springframework.core.io.ClassPathResource;
 
-import java.io.*;
-import java.net.URI;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -33,11 +37,16 @@ public class ProjectContext {
     }
 
     public void scan() {
-        List<SourceFile> sourceFiles = parseSources();
+        List<SourceFile> projectFiles = new ArrayList<>();
+
+        projectFiles.addAll(parseSources());
+        projectFiles.addAll(parseMaven());
+
         String[] recipesFound = getRecipesFound().stream()
                 .map(Recipe::getName)
                 .collect(Collectors.toList()).toArray(new String[]{});
-        changes = new ArrayList<>(applyRecipe(sourceFiles, recipesFound));
+        final List<Change> changes = applyRecipe(projectFiles, recipesFound);
+        this.changes = changes;
     }
 
     private List<Change> applyRecipe(List<SourceFile> sourceFiles, String... recipe) {
@@ -45,14 +54,15 @@ public class ProjectContext {
         final Collection<Change> fixChanges = new Refactor()
                 .visit(orderImportsVisitors)
                 .fix(sourceFiles);
+
         this.changes = new ArrayList<>(fixChanges);
         return changes;
     }
 
     public List<Recipe> getApplicableRecipes() {
         return this.getRecipesFound().stream()
-            .filter(recipe -> isRecipeApplicable(recipe.getName()))
-            .collect(Collectors.toList());
+                .filter(recipe -> isRecipeApplicable(recipe.getName()))
+                .collect(Collectors.toList());
     }
 
     private boolean isRecipeApplicable(String recipeName) {
@@ -70,7 +80,33 @@ public class ProjectContext {
         return sourceFiles;
     }
 
-    protected List<Path> listJavaSources(String sourceDirectory)  {
+    private List<Maven.Pom> parseMaven() {
+        List<Path> allPoms = new ArrayList<>();
+        allPoms.add(projectRoot.resolve("pom.xml"));
+//        // children
+//        if(project.getCollectedProjects() != null) {
+//            project.getCollectedProjects().stream()
+//                    .filter(collectedProject -> collectedProject != project)
+//                    .map(collectedProject -> collectedProject.getFile().toPath())
+//                    .forEach(allPoms::add);
+//        }
+//
+//        // parents
+//        MavenProject parent = project.getParent();
+//        while (parent != null && parent.getFile() != null) {
+//            allPoms.add(parent.getFile().toPath());
+//            parent = parent.getParent();
+//        }
+
+        List<Maven.Pom> mavenPom =  MavenParser
+                .builder()
+                .resolveDependencies(true)
+                .build()
+                .parse(allPoms, this.projectRoot);
+        return mavenPom;
+    }
+
+    protected List<Path> listJavaSources(String sourceDirectory) {
         File sourceDirectoryFile = new File(sourceDirectory);
         if (!sourceDirectoryFile.exists()) {
             return Collections.emptyList();
@@ -97,12 +133,9 @@ public class ProjectContext {
 
         try {
             ClassPathResource classPathResource = new ClassPathResource("META-INF/rewrite.yaml");
-//            final File file = new File("./rewrite.yaml");
-//            InputStream yamlInput = new FileInputStream(file);
             InputStream yamlInput = classPathResource.getInputStream();
-            URI source = URI.create("whatever");
             Properties properties = new Properties();
-            ResourceLoader resourceLoader = new YamlResourceLoader(yamlInput, source, properties);
+            ResourceLoader resourceLoader = new YamlResourceLoader(yamlInput, classPathResource.getURI(), properties);
 
             environment = Environment.builder()
                     .load(resourceLoader)

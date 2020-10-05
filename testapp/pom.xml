@@ -27,4 +27,5 @@
             <scope>provided</scope>
         </dependency>
     </dependencies>
+    <dependencyManagement></dependencyManagement>
 </project>
