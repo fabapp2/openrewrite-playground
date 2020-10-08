@@ -16,7 +16,6 @@
 package org.openrewrite.maven;
 
 import org.openrewrite.Formatting;
-import org.openrewrite.Tree;
 import org.openrewrite.Validated;
 import org.openrewrite.internal.lang.Nullable;
 import org.openrewrite.maven.tree.Maven;
@@ -26,10 +25,7 @@ import org.openrewrite.xml.XmlParser;
 import org.openrewrite.xml.tree.Content;
 import org.openrewrite.xml.tree.Xml;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 import static java.util.Collections.emptyList;
 import static org.openrewrite.Formatting.format;
@@ -112,12 +108,6 @@ public class AddDependencyManagement extends MavenRefactorVisitor {
             return managedDependencyExists;
         }
         return false;
-
-//        boolean managedDependencyExists = pom.getModel().getDependencyManagement().getDependencies().stream()
-//                .map(MavenModel.Dependency::getModuleVersion)
-//                .anyMatch(mvid -> mvid.getGroupId().equals(groupId) &&
-//                        mvid.getArtifactId().equals(artifactId));
-//        return managedDependencyExists;
     }
 
     private boolean dependencyManagementSectionExists(Maven.Pom pom) {
@@ -129,31 +119,45 @@ public class AddDependencyManagement extends MavenRefactorVisitor {
         public Maven visitPom(Maven.Pom pom) {
             Maven.Pom p = refactor(pom, super::visitPom);
 
-            Xml.Tag root = p.getDocument().getRoot();
-            if (!root.getChild("dependencyManagement").isPresent()) {
-                MavenTagInsertionComparator insertionComparator = new MavenTagInsertionComparator(
-                        root.getChildren());
-                List<Xml.Tag> content = new ArrayList<>(root.getChildren());
-
-                Formatting fmt = format(formatter.findIndent(0, root.getChildren().toArray(new Tree[0])).getPrefix());
-                content.add(
+            Formatter.Result indentation = formatter.wholeSourceIndent();
+            Formatting fmt1 = Formatting.format(indentation.getPrefix(0));
+            Formatting fmt2 = Formatting.format(indentation.getPrefix(1));
+            // Add a <dependencyManagement> if one does not already exist
+            if (p.getDependencyManagement() == null) {
+                p = p.withDependencyManagement(new Maven.DependencyManagement(
+                        new org.openrewrite.maven.tree.MavenModel.DependencyManagement(new ArrayList<>()),
                         new Xml.Tag(
                                 randomId(),
                                 "dependencyManagement",
                                 emptyList(),
                                 emptyList(),
-                                new Xml.Tag.Closing(randomId(), "dependencyManagement", "", fmt),
+                                new Xml.Tag.Closing(randomId(), "dependencyManagement", "", fmt1),
                                 "",
-                                fmt
+                                fmt1
                         )
-                );
-
-                content.sort(insertionComparator);
-
-                //noinspection unchecked
-                return p.withDocument(p.getDocument().withRoot(
-                        root.withContent((List) content)
                 ));
+            }
+            // Add a <dependencies> tag beneath <dependencyManagement> if one does not already exist
+            boolean hasDependenciesTag = p.getDependencyManagement()
+                    .getTag()
+                    .getChildren()
+                    .stream()
+                    .anyMatch(it -> it.getName().equals("dependencies"));
+            if(!hasDependenciesTag) {
+                Maven.DependencyManagement currentDepMan = p.getDependencyManagement();
+                Xml.Tag tag = currentDepMan.getTag();
+                List<Content> contents = new ArrayList<>(tag.getContent());
+                Xml.Tag dependenciesTag = new Xml.Tag(
+                        randomId(),
+                        "dependencies",
+                        emptyList(),
+                        emptyList(),
+                        new Xml.Tag.Closing(randomId(), "dependencies", "", fmt2),
+                        "",
+                        fmt2);
+                contents.add(dependenciesTag);
+                currentDepMan = new Maven.DependencyManagement(currentDepMan.getModel(), tag.withContent(contents));
+                p = p.withDependencyManagement(currentDepMan);
             }
             return p;
         }
@@ -165,11 +169,8 @@ public class AddDependencyManagement extends MavenRefactorVisitor {
             Maven.Pom p = refactor(pom, super::visitPom);
             List<Maven.Dependency> dependencies = new ArrayList<>(pom.getDependencyManagement().getDependencies());
 
-            Formatter.Result indent = formatter.findIndent(0, pom.getDocument().getRoot()
-                    .getChild("dependencyManagement").get());
-
             // TODO if the dependency is manageable, make it managed
-            Xml.Tag dependencyTag = createDependencyTag(indent);
+            Xml.Tag dependencyTag = createDependencyTag(formatter.wholeSourceIndent());
 
             Maven.Dependency toAdd = new Maven.DependencyManagement.Dependency(false,
                     new MavenModel.Dependency(
@@ -199,26 +200,21 @@ public class AddDependencyManagement extends MavenRefactorVisitor {
                 }
                 dependencies.add(addAfterIndex + 1, toAdd);
             }
-
-            p.getDocument()
-                    .getRoot()
-                    .getChild("dependencyManagement")
-                    .ifPresent(dependencyManagementTag -> dependencyManagementTag.getContent().add(dependencyTag));
-
+            p = p.withDependencyManagement(p.getDependencyManagement().withDependencies(dependencies));
             return p;
         }
 
         private Xml.Tag createDependencyTag(Formatter.Result indent) {
             return new XmlParser().parse(
                     "<dependency>" +
-                            indent.getPrefix(2) + "<groupId>" + groupId + "</groupId>" +
-                            indent.getPrefix(2) + "<artifactId>" + artifactId + "</artifactId>" +
+                            indent.getPrefix(3) + "<groupId>" + groupId + "</groupId>" +
+                            indent.getPrefix(3) + "<artifactId>" + artifactId + "</artifactId>" +
                             (version == null ? "" :
-                                    indent.getPrefix(2) + "<version>" + version + "</version>") +
+                                    indent.getPrefix(3) + "<version>" + version + "</version>") +
                             (scope == null ? "" :
-                                    indent.getPrefix(2) + "<scope>" + scope + "</scope>") +
-                            indent.getPrefix(1) + "</dependency>"
-            ).get(0).getRoot().withFormatting(format(indent.getPrefix(1)));
+                                    indent.getPrefix(3) + "<scope>" + scope + "</scope>") +
+                            indent.getPrefix(2) + "</dependency>"
+            ).get(0).getRoot().withFormatting(format(indent.getPrefix(2)));
         }
     }
 }
